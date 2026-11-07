@@ -197,22 +197,28 @@ struct StatusPill: View {
 struct HerdrDot: View {
     let status: SessionStatus
     var size: CGFloat = 6
+    /// Crisp ring drawn around the dot, like the outline of the battery icon in the menu bar.
+    var outline: Color? = nil
 
     static let working = Color(red: 0.98, green: 0.66, blue: 0.26)
     static let done = Color(red: 0.36, green: 0.83, blue: 0.55)
     static let blocked = Color(red: 0.98, green: 0.40, blue: 0.38)
 
     var body: some View {
-        Group {
+        ZStack {
             switch status {
             case .idle:
                 Circle().strokeBorder(Self.done, lineWidth: max(1.5, size * 0.22))
+                    .padding(outline == nil ? 0 : 1)
             case .done:
                 Circle().fill(Self.done)
             case .working:
                 Circle().fill(Self.working)
             case .waiting, .asking, .planning:
                 Circle().fill(Self.blocked)
+            }
+            if let outline {
+                Circle().strokeBorder(outline, lineWidth: 1)
             }
         }
         .frame(width: size, height: size)
@@ -233,21 +239,23 @@ struct HerdrDot: View {
 struct NotchDots: View {
     let sessions: [AgentSession]
 
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
-        // Read sessions collapse into one hollow dot; everything that wants attention
-        // (working, unread done, blocked) gets its own dot.
+        // Everything that wants attention (working, unread done, blocked) gets its own dot.
+        // Read sessions show as a single hollow dot, and only when nothing else is there.
         let active = sessions.filter { $0.status != .idle }
             .sorted { HerdrDot.rank($0.status) < HerdrDot.rank($1.status) }
-        HStack(spacing: 5) {
-            if sessions.contains(where: { $0.status == .idle }) {
-                HerdrDot(status: .idle, size: 9)
+        // Menu-bar ink: black on a light bar, white on a dark one — like the native items.
+        let ink = scheme == .dark ? Color.white.opacity(0.9) : Color.black.opacity(0.85)
+        HStack(spacing: 6) {
+            if active.isEmpty, sessions.contains(where: { $0.status == .idle }) {
+                HerdrDot(status: .idle, size: 13, outline: ink)
             }
             ForEach(active.suffix(14)) { s in
-                HerdrDot(status: s.status, size: 9)
+                HerdrDot(status: s.status, size: 13, outline: ink)
             }
         }
-        // A thin dark halo keeps the dots readable on light menu bars.
-        .shadow(color: .black.opacity(0.45), radius: 0.8)
         .allowsHitTesting(false)
     }
 }
