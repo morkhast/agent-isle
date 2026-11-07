@@ -208,7 +208,7 @@ struct HerdrDot: View {
         ZStack {
             switch status {
             case .idle:
-                Circle().strokeBorder(Self.done, lineWidth: max(1.5, size * 0.22))
+                Circle().strokeBorder(Self.done, lineWidth: max(1.5, size * 0.15))
                     .padding(outline == nil ? 0 : 1)
             case .done:
                 Circle().fill(Self.done)
