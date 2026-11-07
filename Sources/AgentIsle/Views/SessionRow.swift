@@ -206,7 +206,7 @@ struct HerdrDot: View {
         Group {
             switch status {
             case .idle:
-                Circle().strokeBorder(Self.done, lineWidth: max(1, size * 0.18))
+                Circle().strokeBorder(Self.done, lineWidth: max(1.5, size * 0.22))
             case .done:
                 Circle().fill(Self.done)
             case .working:
@@ -234,11 +234,20 @@ struct NotchDots: View {
     let sessions: [AgentSession]
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(sessions.sorted { HerdrDot.rank($0.status) < HerdrDot.rank($1.status) }.suffix(14)) { s in
-                HerdrDot(status: s.status, size: 6)
+        // Read sessions collapse into one hollow dot; everything that wants attention
+        // (working, unread done, blocked) gets its own dot.
+        let active = sessions.filter { $0.status != .idle }
+            .sorted { HerdrDot.rank($0.status) < HerdrDot.rank($1.status) }
+        HStack(spacing: 5) {
+            if sessions.contains(where: { $0.status == .idle }) {
+                HerdrDot(status: .idle, size: 9)
+            }
+            ForEach(active.suffix(14)) { s in
+                HerdrDot(status: s.status, size: 9)
             }
         }
+        // A thin dark halo keeps the dots readable on light menu bars.
+        .shadow(color: .black.opacity(0.45), radius: 0.8)
         .allowsHitTesting(false)
     }
 }
