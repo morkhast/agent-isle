@@ -39,8 +39,10 @@ struct IslandRootView: View {
                 ExpandedIsland(notchWidth: geometry.notchWidth,
                                notchHeight: geometry.notchHeight)
             } else {
-                CollapsedIsland(notchWidth: geometry.notchWidth,
-                                notchHeight: geometry.notchHeight)
+                // Local patch: no visible pill at rest — an invisible hover target the
+                // exact size of the physical notch, hidden behind the camera housing.
+                Color.clear
+                    .frame(width: geometry.notchWidth, height: geometry.notchHeight)
             }
         }
         .contentShape(Rectangle())   // whole bounds hoverable, incl. the notch gap

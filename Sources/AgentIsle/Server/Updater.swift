@@ -124,14 +124,9 @@ final class Updater: ObservableObject {
         }
         if !userInitiated, chosen.tag == skippedVersion { return }
 
-        if autoInstall {
-            // Don't yank the app out from under a pending approval on a background
-            // check — retry on the next tick. A manual check installs immediately.
-            if !userInitiated, (store?.attentionCount ?? 0) > 0 { return }
-            await downloadAndInstall(release)
-        } else {
-            promptForUpdate(release)
-        }
+        // Local patch: this is a patched local build — never install the official release
+        // over it. Always just announce the new version; rebuild from source instead.
+        promptForUpdate(release)
     }
 
     // MARK: - Channel selection
@@ -207,14 +202,15 @@ final class Updater: ObservableObject {
         // Notes are Markdown: render them into a scrollable accessory view rather than
         // dumping the source into `informativeText`, which can't be styled or scrolled.
         alert.accessoryView = Self.notesView(release.notes)
-        alert.addButton(withTitle: "Install Update")
+        alert.addButton(withTitle: "Open Release Page")
         alert.addButton(withTitle: "Skip This Version")
         alert.addButton(withTitle: "Later")
 
         NSApp.activate(ignoringOtherApps: true)
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            Task { await downloadAndInstall(release) }
+            // Local patch: open the release page instead of installing over the local build.
+            NSWorkspace.shared.open(release.pageURL)
         case .alertSecondButtonReturn:
             skippedVersion = release.info.tag
         default:

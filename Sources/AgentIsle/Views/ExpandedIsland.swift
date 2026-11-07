@@ -88,14 +88,8 @@ struct ExpandedIsland: View {
     /// the right ear, and an empty center gap the width of the notch.
     private var notchBar: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 7) {
-                AppMark(size: 14)
-                Text("AGENT ISLE")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .tracking(1.2)
-                    .foregroundStyle(Theme.Ink.primary)
-                    .lineLimit(1)
-            }
+            // Local patch: no brand mark/title in the left ear.
+            Color.clear
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 16)
 
