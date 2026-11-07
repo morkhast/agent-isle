@@ -168,12 +168,12 @@ final class IdeWatcher {
                         // No live transcript question — clear a stale transcript-sourced one.
                         if s.question?.source == .transcript { s.question = nil }
                         s.lastMessage = activity.text
-                        // Local: a `.done` from the hook means "waiting for your input" — keep
-                        // it until the transcript moves on (a few seconds of slack for the
-                        // stop-hook bookkeeping Claude writes right after the Stop event).
-                        let holdsDone = s.status == .done
-                            && (doneMark.map { c.mtime <= $0.addingTimeInterval(5) } ?? false)
-                        if s.permission == nil && s.question == nil && !holdsDone {
+                        // Local: once the Stop hook has ended the turn, the transcript's recent
+                        // mtime doesn't mean "working" — leave the status (Done, or Idle once
+                        // read) alone until the transcript moves on (a few seconds of slack for
+                        // the stop-hook bookkeeping Claude writes right after the Stop event).
+                        let turnEnded = doneMark.map { c.mtime <= $0.addingTimeInterval(5) } ?? false
+                        if s.permission == nil && s.question == nil && !turnEnded {
                             s.status = working ? .working : .idle
                         }
                     }

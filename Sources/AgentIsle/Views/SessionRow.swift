@@ -208,8 +208,9 @@ struct HerdrDot: View {
         ZStack {
             switch status {
             case .idle:
-                Circle().strokeBorder(Self.done, lineWidth: max(1.5, size * 0.15))
-                    .padding(outline == nil ? 0 : 1)
+                // Read: just an empty ring, no colour — beside the notch it's the outline itself.
+                Circle().strokeBorder(outline ?? Color.white.opacity(0.55),
+                                      lineWidth: outline == nil ? max(1.5, size * 0.15) : 1.3)
             case .done:
                 Circle().fill(Self.done)
             case .working:
@@ -217,7 +218,7 @@ struct HerdrDot: View {
             case .waiting, .asking, .planning:
                 Circle().fill(Self.blocked)
             }
-            if let outline {
+            if let outline, status != .idle {
                 Circle().strokeBorder(outline, lineWidth: 1)
             }
         }
