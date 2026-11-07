@@ -60,7 +60,9 @@ struct SessionRow: View {
 
     private var identity: some View {
         HStack(alignment: .top, spacing: Theme.Space.md) {
-            AgentBadge(agent: session.agent, size: 32)
+            // Local: Herdr-style status dot instead of the agent badge.
+            HerdrDot(status: session.status, size: 10)
+                .frame(width: 14, height: 18)
             VStack(alignment: .leading, spacing: 5) {
                 // Title + agent tag + elapsed, mirroring a native message header.
                 HStack(spacing: Theme.Space.sm) {
@@ -187,5 +189,56 @@ struct StatusPill: View {
                 .foregroundStyle(status.color)
         }
         .padding(.trailing, 2)
+    }
+}
+
+/// Local: Herdr-style status dot — orange = working, filled green = done and not yet read,
+/// hollow green = read (idle), red = waiting on a permission/question/plan.
+struct HerdrDot: View {
+    let status: SessionStatus
+    var size: CGFloat = 6
+
+    static let working = Color(red: 0.98, green: 0.66, blue: 0.26)
+    static let done = Color(red: 0.36, green: 0.83, blue: 0.55)
+    static let blocked = Color(red: 0.98, green: 0.40, blue: 0.38)
+
+    var body: some View {
+        Group {
+            switch status {
+            case .idle:
+                Circle().strokeBorder(Self.done, lineWidth: max(1, size * 0.18))
+            case .done:
+                Circle().fill(Self.done)
+            case .working:
+                Circle().fill(Self.working)
+            case .waiting, .asking, .planning:
+                Circle().fill(Self.blocked)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    /// Order for the row beside the notch: read first (far left), attention nearest the notch.
+    static func rank(_ status: SessionStatus) -> Int {
+        switch status {
+        case .idle: return 0
+        case .done: return 1
+        case .working: return 2
+        case .waiting, .asking, .planning: return 3
+        }
+    }
+}
+
+/// Local: the at-a-glance row of dots shown beside the notch while the island is collapsed.
+struct NotchDots: View {
+    let sessions: [AgentSession]
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(sessions.sorted { HerdrDot.rank($0.status) < HerdrDot.rank($1.status) }.suffix(14)) { s in
+                HerdrDot(status: s.status, size: 6)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

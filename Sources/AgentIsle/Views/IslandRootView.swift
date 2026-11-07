@@ -43,6 +43,14 @@ struct IslandRootView: View {
                 // exact size of the physical notch, hidden behind the camera housing.
                 Color.clear
                     .frame(width: geometry.notchWidth, height: geometry.notchHeight)
+                    // Status dots just left of the notch. Drawn outside the island's layout
+                    // bounds, so they're outside the click/hover rect too: the menu bar under
+                    // them stays clickable.
+                    .overlay(alignment: .leading) {
+                        NotchDots(sessions: store.visibleSessions)
+                            .fixedSize()
+                            .alignmentGuide(.leading) { d in d.width + 8 }
+                    }
             }
         }
         .contentShape(Rectangle())   // whole bounds hoverable, incl. the notch gap

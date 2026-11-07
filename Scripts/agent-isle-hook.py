@@ -581,7 +581,9 @@ def main():
             ntype = hook.get("notification_type") or ""
             low = msg.lower()
             if ntype == "idle_prompt" or "waiting for your input" in low:
-                status = "done"
+                # Stop already reported Done; re-posting it would turn a session the user
+                # has already looked at (idle) back into unread.
+                status = None
             elif ntype == "permission_prompt" or "permission" in low:
                 status = "waiting"
             elif ntype == "elicitation_dialog":

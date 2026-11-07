@@ -16,22 +16,45 @@ enum Herdr {
     }()
 
     private static let lock = NSLock()
-    private static var cached: (at: Date, panes: [String: String]?)?
+    private static var cached: (at: Date, panes: [String: String]?, focused: String?)?
+    private static var cachedHost: (at: Date, bundleID: String?)?
 
     /// Claude session id (lowercased) → Herdr pane id for every agent Herdr tracks.
     /// Nil when Herdr isn't installed or its server isn't reachable.
     static func panesBySession(maxAge: TimeInterval = 0) -> [String: String]? {
+        snapshot(maxAge: maxAge).panes
+    }
+
+    /// Claude session id (lowercased) of the pane focused in Herdr, if it runs an agent.
+    static func focusedSession(maxAge: TimeInterval = 0) -> String? {
+        snapshot(maxAge: maxAge).focused
+    }
+
+    /// Bundle id of the terminal app hosting the Herdr client (cached for a minute).
+    static func hostBundleID() -> String? {
+        lock.lock()
+        let hit = cachedHost
+        lock.unlock()
+        if let hit, Date().timeIntervalSince(hit.at) < 60 { return hit.bundleID }
+        let id = hostApp()?.bundleIdentifier
+        lock.lock()
+        cachedHost = (Date(), id)
+        lock.unlock()
+        return id
+    }
+
+    private static func snapshot(maxAge: TimeInterval) -> (panes: [String: String]?, focused: String?) {
         if maxAge > 0 {
             lock.lock()
             let hit = cached
             lock.unlock()
-            if let hit, Date().timeIntervalSince(hit.at) < maxAge { return hit.panes }
+            if let hit, Date().timeIntervalSince(hit.at) < maxAge { return (hit.panes, hit.focused) }
         }
-        let panes = fetchPanes()
+        let fresh = fetchPanes()
         lock.lock()
-        cached = (Date(), panes)
+        cached = (Date(), fresh?.panes, fresh?.focused)
         lock.unlock()
-        return panes
+        return (fresh?.panes, fresh?.focused)
     }
 
     /// Focus the pane running `sessionID` and bring the terminal hosting Herdr to the front.
@@ -53,19 +76,21 @@ enum Herdr {
         run(["agent", "prompt", pane, text]) != nil
     }
 
-    private static func fetchPanes() -> [String: String]? {
+    private static func fetchPanes() -> (panes: [String: String], focused: String?)? {
         guard let data = run(["agent", "list"]),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let result = obj["result"] as? [String: Any],
               let agents = result["agents"] as? [[String: Any]] else { return nil }
         var map: [String: String] = [:]
+        var focused: String?
         for agent in agents {
             guard let pane = agent["pane_id"] as? String,
                   let session = agent["agent_session"] as? [String: Any],
                   let id = session["value"] as? String else { continue }
             map[id.lowercased()] = pane
+            if agent["focused"] as? Bool == true { focused = id.lowercased() }
         }
-        return map
+        return (map, focused)
     }
 
     /// The GUI app the Herdr client runs in: find the client process (`herdr` with no

@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Discovers active Claude Code sessions — terminal **and** IDE — with no hooks.
 ///
@@ -284,6 +284,7 @@ final class IdeWatcher {
         remoteSync.prune(live: liveRemoteIDs)
 
         pruneMissing(current: found)
+        markSeenFromHerdr()
         // Forget completion state for sessions that are no longer live, so a session id
         // reappearing later can notify again.
         doneNotified.formIntersection(found)
@@ -437,20 +438,40 @@ final class IdeWatcher {
             at: projectsDir, includingPropertiesForKeys: nil) else { return [] }
 
         var candidates: [Candidate] = []
+        // Local: every session alive in a Herdr pane is shown, however long it has been quiet
+        // (like Herdr's own sidebar); the recency window and cap apply to the rest.
+        var live: [Candidate] = []
+        let herdrLive = Herdr.panesBySession(maxAge: 10) ?? [:]
         let now = Date()
         for folder in folders {
             guard let files = try? FileManager.default.contentsOfDirectory(
                 at: folder, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
             for url in files where url.pathExtension == "jsonl" {
                 let m = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                if now.timeIntervalSince(m) < activeWindow {
-                    candidates.append(Candidate(url: url,
-                                                sessionID: url.deletingPathExtension().lastPathComponent,
-                                                mtime: m))
+                let sid = url.deletingPathExtension().lastPathComponent
+                let c = Candidate(url: url, sessionID: sid, mtime: m)
+                if herdrLive[sid.lowercased()] != nil {
+                    live.append(c)
+                } else if now.timeIntervalSince(m) < activeWindow {
+                    candidates.append(c)
                 }
             }
         }
-        return Array(candidates.sorted { $0.mtime > $1.mtime }.prefix(maxSessions))
+        let recent = candidates.sorted { $0.mtime > $1.mtime }.prefix(max(0, maxSessions - live.count))
+        return (live + recent).sorted { $0.mtime > $1.mtime }
+    }
+
+    /// Local: a finished session counts as read once the user looks at it — its Herdr pane is
+    /// focused while the terminal hosting Herdr is frontmost. Done → idle (hollow dot).
+    private func markSeenFromHerdr() {
+        let done = store.sessions.filter { $0.status == .done }
+        guard !done.isEmpty,
+              let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+              front == Herdr.hostBundleID(),
+              let focused = Herdr.focusedSession(maxAge: 2) else { return }
+        for s in done where Jumper.cliSessionUUID(s)?.lowercased() == focused {
+            store.acknowledge(sessionID: s.id)
+        }
     }
 
     private func pruneMissing(current: Set<UUID>) {
