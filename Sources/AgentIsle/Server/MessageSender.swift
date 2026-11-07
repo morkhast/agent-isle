@@ -103,6 +103,21 @@ enum MessageSender {
 
         // Single-line prompt: strip any stray newlines so terminal delivery is clean.
         let line = text.replacingOccurrences(of: "\n", with: " ")
+
+        // Local: a session in a Herdr pane takes the prompt straight from Herdr — otherwise
+        // its "Terminal" label would script Terminal.app and type the answer there.
+        if let sid = Jumper.cliSessionUUID(session),
+           let pane = Herdr.panesBySession(maxAge: 10)?[sid.lowercased()] {
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard isCurrentAttempt(generation, on: channel) else { return }
+                let ok = Herdr.prompt(pane: pane, text: line)
+                DispatchQueue.main.async {
+                    guarded(ok ? .success(()) : .failure(.scriptFailed("herdr agent prompt failed for \(pane)")))
+                }
+            }
+            return
+        }
+
         let bundle = session.terminalBundleID ?? bundleID(forLabel: session.terminal)
 
         switch bundle {

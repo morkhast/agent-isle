@@ -47,6 +47,12 @@ enum Herdr {
         return true
     }
 
+    /// Submit `text` to the agent in `pane` (Herdr pastes it and presses Enter) — no focus
+    /// change, no keystroke synthesis. Blocking: call off the main thread.
+    static func prompt(pane: String, text: String) -> Bool {
+        run(["agent", "prompt", pane, text]) != nil
+    }
+
     private static func fetchPanes() -> [String: String]? {
         guard let data = run(["agent", "list"]),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
