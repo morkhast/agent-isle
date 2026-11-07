@@ -100,6 +100,10 @@ final class SessionStore: ObservableObject {
     /// re-chiming) the same card in that window. Cleared once the transcript moves past the
     /// question, or once the grace window lapses (see `wasTranscriptQuestionAnswered`).
     private var answeredTranscriptQuestions: [UUID: (question: AgentQuestion, at: Date)] = [:]
+    /// Local: when each session last transitioned into `.done` (Stop hook / idle notification).
+    /// `IdeWatcher` keeps `.done` while the transcript hasn't moved past this moment, so a
+    /// session waiting for the user's input isn't downgraded to working/idle by the poller.
+    private(set) var doneAt: [UUID: Date] = [:]
     /// How long an answered transcript question stays suppressed before it may resurface
     /// (in case a best-effort answer never reached the agent). `var` so tests can adjust it.
     var answeredQuestionGrace: TimeInterval = 8
@@ -237,6 +241,7 @@ final class SessionStore: ObservableObject {
         // the user's own way to dismiss a banner that outlives its relevance.
         if s.status == .done && previousStatus != .done {
             clearAllSendErrors(for: id)
+            doneAt[id] = Date()
         }
         // An archived session that starts working (or needs attention) again should
         // resurface rather than stay dismissed forever.
@@ -251,6 +256,7 @@ final class SessionStore: ObservableObject {
         bypassedSessions.remove(id)
         alwaysAllowed[id] = nil
         answeredTranscriptQuestions[id] = nil
+        doneAt[id] = nil
         archivedIDs.remove(id)
         clearAllSendErrors(for: id)
         if id == openedSessionID { closeChat() }

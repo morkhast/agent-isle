@@ -65,6 +65,11 @@ enum Jumper {
             return
         }
 
+        // Local: a CLI session running in a Herdr pane — focus that exact pane.
+        if let id = cliSessionUUID(session), Herdr.focus(sessionID: id) {
+            return
+        }
+
         // Prefer the exact host app the hook reported via TERM_PROGRAM.
         let bundle = session.terminalBundleID ?? bundleIDs[session.terminal]
 
@@ -105,10 +110,16 @@ enum Jumper {
     /// there is no local transcript (a session running over SSH — see `RemoteSessions`).
     /// Nil when neither yields a UUID.
     static func claudeResumeURL(for session: AgentSession) -> URL? {
+        guard let stem = cliSessionUUID(session) else { return nil }
+        return URL(string: "claude://resume?session=\(stem)")
+    }
+
+    /// The Claude Code session UUID: transcript filename stem, else the carried CLI id.
+    static func cliSessionUUID(_ session: AgentSession) -> String? {
         let stem = session.transcriptURL?.deletingPathExtension().lastPathComponent
             ?? session.cliSessionID
         guard let stem, UUID(uuidString: stem) != nil else { return nil }
-        return URL(string: "claude://resume?session=\(stem)")
+        return stem
     }
 
     /// A deep-link that opens a specific Claude Code editor-extension session (VS Code /

@@ -575,8 +575,21 @@ def main():
                       message=f"Ran {tool}"))
 
         elif kind == "notification":
+            # Local: a notification means Claude is NOT working. Map it to the state the user
+            # has to act on; anything else (auth_success, ...) leaves the status alone.
             msg = hook.get("message", "Waiting for input")
-            post(dict(base, type="status", status="working", message=msg))
+            ntype = hook.get("notification_type") or ""
+            low = msg.lower()
+            if ntype == "idle_prompt" or "waiting for your input" in low:
+                status = "done"
+            elif ntype == "permission_prompt" or "permission" in low:
+                status = "waiting"
+            elif ntype == "elicitation_dialog":
+                status = "asking"
+            else:
+                status = None
+            if status:
+                post(dict(base, type="status", status=status, message=msg))
 
         elif kind == "userprompt":
             prompt = hook.get("prompt", "")

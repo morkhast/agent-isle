@@ -129,6 +129,7 @@ final class IdeWatcher {
                     return q
                 }()
                 let newlySurfaced = transcriptQuestion != nil && existing.question != transcriptQuestion
+                let doneMark = store.doneAt[id]
 
                 store.update(id: id) { s in
                     s.title = title
@@ -167,7 +168,12 @@ final class IdeWatcher {
                         // No live transcript question — clear a stale transcript-sourced one.
                         if s.question?.source == .transcript { s.question = nil }
                         s.lastMessage = activity.text
-                        if s.permission == nil && s.question == nil {
+                        // Local: a `.done` from the hook means "waiting for your input" — keep
+                        // it until the transcript moves on (a few seconds of slack for the
+                        // stop-hook bookkeeping Claude writes right after the Stop event).
+                        let holdsDone = s.status == .done
+                            && (doneMark.map { c.mtime <= $0.addingTimeInterval(5) } ?? false)
+                        if s.permission == nil && s.question == nil && !holdsDone {
                             s.status = working ? .working : .idle
                         }
                     }
@@ -448,11 +454,20 @@ final class IdeWatcher {
     }
 
     private func pruneMissing(current: Set<UUID>) {
+        var keep = current
         let gone = trackedIDs.subtracting(current)
-        for id in gone where store.sessions.contains(where: { $0.id == id }) {
+        for id in gone {
+            guard let s = store.sessions.first(where: { $0.id == id }) else { continue }
+            // Local: a session waiting for the user's input has a quiet transcript, so it ages
+            // out of the active window — keep it while its Herdr pane is still alive.
+            if s.status == .done, let sid = Jumper.cliSessionUUID(s),
+               Herdr.panesBySession(maxAge: 10)?[sid.lowercased()] != nil {
+                keep.insert(id)
+                continue
+            }
             store.remove(id: id)
         }
-        trackedIDs = current
+        trackedIDs = keep
     }
 
     private func displayTitle(activity: TranscriptReader.Activity) -> String {
