@@ -181,7 +181,11 @@ final class NotchWindow: NSPanel {
         // The island is centered in the window, then shifted by `islandOffsetX`.
         let x = (fixedWidth - w) / 2 + offsetX
         let y = fixedHeight - h   // top-aligned
-        (contentView as? PassthroughView)?.interactiveRect = NSRect(x: x, y: y, width: w, height: h)
+        // Local: run the rect a little past the top edge. A pointer pushed against the top of
+        // the screen reports exactly the screen's maxY, which `contains` (half-open) excludes,
+        // so flicking the pointer up into the notch didn't open the island.
+        let topSlack: CGFloat = 2
+        (contentView as? PassthroughView)?.interactiveRect = NSRect(x: x, y: y, width: w, height: h + topSlack)
         // The rect just changed, so a stationary pointer may now be outside it even
         // though no mouse-move fired. Re-evaluate hover against the new rect, otherwise
         // the panel stays expanded after it shrinks (e.g. a question card clears)
