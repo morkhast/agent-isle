@@ -137,8 +137,9 @@ final class IdeWatcher {
                 let newlySurfaced = transcriptQuestion != nil && existing.question != transcriptQuestion
                 let doneMark = store.doneAt[id]
 
-                store.update(id: id) { s in
+                store.update(id: id, touch: false) { s in
                     s.title = title
+                    s.updatedAt = c.lastReal == .distantPast ? c.mtime : c.lastReal
                     // Host label. Claude Desktop is the exception: it fires the hook for
                     // tools but reports no TERM_PROGRAM, so the hook mislabels it "Terminal"
                     // (and pins a bundle, so the rule below would keep that stale label). The
@@ -244,8 +245,9 @@ final class IdeWatcher {
             trackedIDs.insert(e.id)
             let working = Date().timeIntervalSince(e.mtime) < workingWindow
             if store.sessions.contains(where: { $0.id == e.id }) {
-                store.update(id: e.id) { s in
+                store.update(id: e.id, touch: false) { s in
                     s.title = e.title
+                    s.updatedAt = e.mtime
                     s.lastMessage = e.lastMessage
                     if let model = e.model { s.model = model }
                     s.workspacePath = e.cwd
@@ -346,7 +348,7 @@ final class IdeWatcher {
             return
         }
 
-        store.update(id: r.id) { s in
+        store.update(id: r.id, touch: false) { s in
             s.title = r.title
             s.workspacePath = r.cwd
             s.updatedAt = r.updatedAt

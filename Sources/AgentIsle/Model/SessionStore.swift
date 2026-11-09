@@ -223,12 +223,15 @@ final class SessionStore: ObservableObject {
         clearArchiveIfActive(id: session.id, status: session.status)
     }
 
-    func update(id: UUID, _ transform: (inout AgentSession) -> Void) {
+    /// Local: `touch: false` keeps the `updatedAt` the transform sets. Pollers pass their own
+    /// last-activity time — stamping "now" on every poll ordered the list by poll order, which
+    /// (polled newest first) put the stalest session on top.
+    func update(id: UUID, touch: Bool = true, _ transform: (inout AgentSession) -> Void) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         var s = sessions[idx]
         let previousStatus = s.status
         transform(&s)
-        s.updatedAt = Date()
+        if touch { s.updatedAt = Date() }
         sessions[idx] = s
         // A session that has just wrapped up shouldn't keep showing a failed-send banner for
         // whatever it was last trying to deliver — that attempt is moot now. Gated on a real
