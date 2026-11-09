@@ -129,7 +129,8 @@ final class NotchWindow: NSPanel {
         hoverPoll?.invalidate()
         hoverPoll = nil
         guard hovering else { return }
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+        // Local: 60 Hz, so leaving the panel collapses it at once rather than up to 0.1 s later.
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             self?.syncHoverToPointer()
         }
         // .common so it keeps firing during scrolls/tracking runloop modes.
@@ -139,10 +140,9 @@ final class NotchWindow: NSPanel {
 
     private func syncHoverToPointer() {
         guard let view = contentView as? PassthroughView else { return }
-        // `interactiveRect` is in the borderless window's base coordinates, so it
-        // converts straight to screen space for comparison with the cursor.
-        let screenRect = convertToScreen(view.interactiveRect)
-        let inside = screenRect.contains(NSEvent.mouseLocation)
+        // The view sits at the borderless window's origin, so window base coordinates
+        // are the view's own.
+        let inside = view.claims(convertPoint(fromScreen: NSEvent.mouseLocation))
         MainActor.assumeIsolated { store.setHovering(inside) }
     }
 
@@ -183,11 +183,23 @@ final class NotchWindow: NSPanel {
         // The island is centered in the window, then shifted by `islandOffsetX`.
         let x = (fixedWidth - w) / 2 + offsetX
         let y = fixedHeight - h   // top-aligned
-        // Local: run the rect a little past the top edge. A pointer pushed against the top of
-        // the screen reports exactly the screen's maxY, which `contains` (half-open) excludes,
-        // so flicking the pointer up into the notch didn't open the island.
-        let topSlack: CGFloat = 2
-        (contentView as? PassthroughView)?.interactiveRect = NSRect(x: x, y: y, width: w, height: h + topSlack)
+        let rect = NSRect(x: x, y: y, width: w, height: h)
+        // Local: expanded, track the panel's black silhouette, not its frame — the frame runs
+        // past the visible body by the flare inset on both sides and fills the rounded bottom
+        // corners. The shape is drawn y-down from the island's top, so flip it into place.
+        // (The top edge itself, where a pointer pushed up reports exactly maxY, is handled in
+        // `PassthroughView.claims`.)
+        let collapsed = w <= geometry.notchWidth + 0.5 && h <= geometry.notchHeight + 0.5
+        var path: CGPath?
+        if !collapsed {
+            var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: x, ty: fixedHeight)
+            path = ExpandedIsland.notchSurface.path(in: CGRect(x: 0, y: 0, width: w, height: h))
+                .cgPath.copy(using: &flip)
+        }
+        if let view = contentView as? PassthroughView {
+            view.interactiveRect = rect
+            view.interactivePath = path
+        }
         // The rect just changed, so a stationary pointer may now be outside it even
         // though no mouse-move fired. Re-evaluate hover against the new rect, otherwise
         // the panel stays expanded after it shrinks (e.g. a question card clears)

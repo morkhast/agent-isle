@@ -15,6 +15,10 @@ struct ExpandedIsland: View {
 
     private var panelWidth: CGFloat { max(440, CGFloat(settings.maxPanelWidth)) }
 
+    /// Local: the attached panel's silhouette, shared with `NotchWindow` so hover tracks
+    /// exactly the black shape rather than its bounding box.
+    static let notchSurface = NotchShape(topRadius: Theme.Radius.notchFlare, bottomRadius: 26)
+
     var body: some View {
         VStack(spacing: 0) {
             notchBar           // occupies the physical-notch band; content only in the ears
@@ -42,7 +46,7 @@ struct ExpandedIsland: View {
     /// rounded card when it floats inside the menu-bar popover.
     @ViewBuilder private var surface: some View {
         if attachedToNotch {
-            surface(NotchShape(topRadius: Theme.Radius.notchFlare, bottomRadius: 26))
+            surface(Self.notchSurface)
         } else {
             surface(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
         }

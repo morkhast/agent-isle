@@ -148,8 +148,9 @@ final class SessionStore: ObservableObject {
         visibleSessions.filter { $0.status == .working }.count
     }
 
-    /// Report whether the pointer is inside the island. Entry applies immediately;
-    /// exit is debounced slightly so brief tracking drops near the notch don't flicker.
+    /// Report whether the pointer is inside the island. Entry applies immediately; exit
+    /// lands on the next runloop tick (Local: no 0.22 s debounce — collapse the moment the
+    /// pointer leaves, deferred only so it never publishes mid view update).
     ///
     /// Exit is idempotent: while a collapse is already scheduled, further "outside"
     /// reports are ignored rather than rescheduling it. This lets a caller poll the
@@ -174,7 +175,7 @@ final class SessionStore: ObservableObject {
                 self.scheduleHoverExpanded(false, after: AppSettings.shared.autoCollapseDelay)
             }
             hoverCollapseWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: work)
+            DispatchQueue.main.async(execute: work)
         }
     }
 
