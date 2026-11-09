@@ -51,6 +51,8 @@ final class IdeWatcher {
     /// Cache of sub-agent task/activity keyed by agent id, so each poll re-reads a
     /// sub-agent file only when it actually changed. Pruned to live agents each scan.
     private var subAgentCache: [String: TranscriptReader.SubAgentCache] = [:]
+    /// Local: last real activity per transcript, re-read only when the file's mtime moves.
+    private var realActivityCache: [String: (mtime: Date, at: Date?)] = [:]
 
     init(store: SessionStore) {
         self.store = store
@@ -79,6 +81,10 @@ final class IdeWatcher {
         let url: URL
         let sessionID: String
         let mtime: Date
+        /// Local: newest real activity in the transcript (`TranscriptReader.lastRealActivity`).
+        /// Drives working/idle/done instead of `mtime`, which an idle session keeps bumping
+        /// with bookkeeping writes. `.distantPast` when the tail has none.
+        let lastReal: Date
     }
 
     private func scan() {
@@ -111,7 +117,7 @@ final class IdeWatcher {
                                                   workingWindow: workingWindow,
                                                   cache: &subAgentCache)
             liveSubAgentIDs.formUnion(subs.map(\.id))
-            let working = Date().timeIntervalSince(c.mtime) < workingWindow
+            let working = Date().timeIntervalSince(c.lastReal) < workingWindow
                 || subs.contains { $0.working }
 
             // Drop the answered-marker once the transcript's pending question moves on, so
@@ -168,11 +174,11 @@ final class IdeWatcher {
                         // No live transcript question — clear a stale transcript-sourced one.
                         if s.question?.source == .transcript { s.question = nil }
                         s.lastMessage = activity.text
-                        // Local: once the Stop hook has ended the turn, the transcript's recent
-                        // mtime doesn't mean "working" — leave the status (Done, or Idle once
-                        // read) alone until the transcript moves on (a few seconds of slack for
-                        // the stop-hook bookkeeping Claude writes right after the Stop event).
-                        let turnEnded = doneMark.map { c.mtime <= $0.addingTimeInterval(5) } ?? false
+                        // Local: once the Stop hook has ended the turn, recent activity doesn't
+                        // mean "working" — leave the status (Done, or Idle once read) alone
+                        // until the transcript moves on (a few seconds of slack for the
+                        // stop-hook bookkeeping Claude writes right after the Stop event).
+                        let turnEnded = doneMark.map { c.lastReal <= $0.addingTimeInterval(5) } ?? false
                         if s.permission == nil && s.question == nil && !turnEnded {
                             s.status = working ? .working : .idle
                         }
@@ -191,7 +197,7 @@ final class IdeWatcher {
                 // completion notifies exactly once.
                 if working {
                     doneNotified.remove(id)
-                } else if Date().timeIntervalSince(c.mtime) >= settledWindow,
+                } else if Date().timeIntervalSince(c.lastReal) >= settledWindow,
                           !doneNotified.contains(id),
                           let finished = store.sessions.first(where: { $0.id == id }),
                           finished.status == .idle {
@@ -212,7 +218,7 @@ final class IdeWatcher {
                     lastMessage: transcriptQuestion?.summary ?? activity.text,
                     status: transcriptQuestion != nil ? .asking : (working ? .working : .idle),
                     startedAt: (try? c.url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? c.mtime,
-                    updatedAt: c.mtime,
+                    updatedAt: c.lastReal == .distantPast ? c.mtime : c.lastReal,
                     question: transcriptQuestion,
                     tasks: TaskList(items: activity.tasks),
                     tokens: tokens,
@@ -431,8 +437,8 @@ final class IdeWatcher {
         }
     }
 
-    /// Every transcript touched within the active window (so concurrent sessions in the
-    /// same repo each appear), most-recent first, capped at `maxSessions`.
+    /// Every transcript with real activity within the active window (so concurrent sessions
+    /// in the same repo each appear), most-recent first, capped at `maxSessions`.
     private func activeTranscripts() -> [Candidate] {
         guard let folders = try? FileManager.default.contentsOfDirectory(
             at: projectsDir, includingPropertiesForKeys: nil) else { return [] }
@@ -443,22 +449,39 @@ final class IdeWatcher {
         var live: [Candidate] = []
         let herdrLive = Herdr.panesBySession(maxAge: 10) ?? [:]
         let now = Date()
+        var seenCache: [String: (mtime: Date, at: Date?)] = [:]
+        func lastReal(_ sid: String, _ url: URL, _ m: Date) -> Date {
+            let at: Date?
+            if let hit = realActivityCache[sid], hit.mtime == m {
+                at = hit.at
+            } else {
+                at = TranscriptReader.lastRealActivity(in: url)
+            }
+            seenCache[sid] = (m, at)
+            return at ?? .distantPast
+        }
         for folder in folders {
             guard let files = try? FileManager.default.contentsOfDirectory(
                 at: folder, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
             for url in files where url.pathExtension == "jsonl" {
                 let m = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
                 let sid = url.deletingPathExtension().lastPathComponent
-                let c = Candidate(url: url, sessionID: sid, mtime: m)
                 if herdrLive[sid.lowercased()] != nil {
-                    live.append(c)
+                    live.append(Candidate(url: url, sessionID: sid, mtime: m, lastReal: lastReal(sid, url, m)))
                 } else if now.timeIntervalSince(m) < activeWindow {
-                    candidates.append(c)
+                    // mtime is a cheap prefilter (bookkeeping only ever makes it newer than
+                    // the real activity); the window itself is judged on real activity, so a
+                    // long-idle session isn't resurrected by a ledger write.
+                    let real = lastReal(sid, url, m)
+                    if now.timeIntervalSince(real) < activeWindow {
+                        candidates.append(Candidate(url: url, sessionID: sid, mtime: m, lastReal: real))
+                    }
                 }
             }
         }
-        let recent = candidates.sorted { $0.mtime > $1.mtime }.prefix(max(0, maxSessions - live.count))
-        return (live + recent).sorted { $0.mtime > $1.mtime }
+        realActivityCache = seenCache
+        let recent = candidates.sorted { $0.lastReal > $1.lastReal }.prefix(max(0, maxSessions - live.count))
+        return (live + recent).sorted { $0.lastReal > $1.lastReal }
     }
 
     /// Local: a finished session counts as read once the user looks at it — its Herdr pane is
