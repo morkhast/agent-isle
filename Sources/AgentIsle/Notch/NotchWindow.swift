@@ -176,8 +176,14 @@ final class NotchWindow: NSPanel {
     /// The island renders at the top-center of the fixed window; mark exactly that
     /// rect (plus a little padding) as clickable so everything else stays click-through.
     private func updateHitRegion(_ islandSize: CGSize, offsetX: CGFloat) {
-        let w = islandSize.width + hitPadding * 2
-        let h = islandSize.height + hitPadding * 2
+        // Local: collapsed, the island is an invisible notch-sized target — open only from the
+        // physical notch itself, no padding spilling onto the menu bar or the window below.
+        // The padding stays for the expanded panel, so it doesn't drop on a jittery edge.
+        let collapsed = islandSize.width <= geometry.notchWidth + 0.5
+            && islandSize.height <= geometry.notchHeight + 0.5
+        let pad: CGFloat = collapsed ? 0 : hitPadding
+        let w = islandSize.width + pad * 2
+        let h = islandSize.height + pad * 2
         // The island is centered in the window, then shifted by `islandOffsetX`.
         let x = (fixedWidth - w) / 2 + offsetX
         let y = fixedHeight - h   // top-aligned
