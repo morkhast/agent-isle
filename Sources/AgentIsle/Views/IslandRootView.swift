@@ -14,11 +14,6 @@ struct IslandRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             island
-                .background(
-                    GeometryReader { proxy in
-                        Color.clear.preference(key: IslandSizeKey.self, value: proxy.size)
-                    }
-                )
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -66,6 +61,14 @@ struct IslandRootView: View {
                 }
             }
         }
+        // Measure the island itself, before the full-width centering frame below: measured
+        // after it, the size is always the whole window's width, so the hover/hit rect
+        // spread far past the visible panel and it wouldn't collapse with the pointer beside it.
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: IslandSizeKey.self, value: proxy.size)
+            }
+        )
         .frame(maxWidth: .infinity, alignment: .top)
     }
 }
