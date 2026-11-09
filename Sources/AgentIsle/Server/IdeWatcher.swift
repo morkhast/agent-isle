@@ -53,6 +53,9 @@ final class IdeWatcher {
     private var subAgentCache: [String: TranscriptReader.SubAgentCache] = [:]
     /// Local: last real activity per transcript, re-read only when the file's mtime moves.
     private var realActivityCache: [String: (mtime: Date, at: Date?)] = [:]
+    /// Local: chat titles by session id, re-read when the transcript changes. A title that
+    /// scrolls out of the tail is kept rather than dropped back to the folder name.
+    private var chatTitleCache: [String: (mtime: Date, title: String?)] = [:]
 
     init(store: SessionStore) {
         self.store = store
@@ -104,7 +107,7 @@ final class IdeWatcher {
             found.insert(id)
             trackedIDs.insert(id)
 
-            let title = displayTitle(activity: activity)
+            let title = chatTitle(c) ?? displayTitle(activity: activity)
             let terminal = source.label
             let tokens = tokens(for: c)
 
@@ -239,6 +242,8 @@ final class IdeWatcher {
         // without bound as sub-agents come and go. (Cache is tiny — at most
         // maxSessions × the per-session cap — so filtering every scan is cheap.)
         subAgentCache = subAgentCache.filter { liveSubAgentIDs.contains($0.key) }
+        let candidateIDs = Set(candidates.map(\.sessionID))
+        chatTitleCache = chatTitleCache.filter { candidateIDs.contains($0.key) }
         // Other agents (Grok, Copilot, …) discovered from their own history files.
         for e in ExternalAgents.scanAll(activeWindow: activeWindow, maxPerAgent: 5) {
             found.insert(e.id)
@@ -514,6 +519,14 @@ final class IdeWatcher {
             store.remove(id: id)
         }
         trackedIDs = keep
+    }
+
+    /// Local: the chat's own name (see `TranscriptReader.chatTitle`), cached per mtime.
+    private func chatTitle(_ c: Candidate) -> String? {
+        if let hit = chatTitleCache[c.sessionID], hit.mtime == c.mtime { return hit.title }
+        let title = TranscriptReader.chatTitle(in: c.url) ?? chatTitleCache[c.sessionID]?.title
+        chatTitleCache[c.sessionID] = (c.mtime, title)
+        return title
     }
 
     private func displayTitle(activity: TranscriptReader.Activity) -> String {

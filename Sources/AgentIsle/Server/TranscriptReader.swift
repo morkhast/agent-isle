@@ -20,6 +20,23 @@ enum TranscriptReader {
     /// that counts as activity (see `activityTimestamp`). nil when the tail has none, i.e.
     /// "long ago". Unlike the file's mtime this ignores the bookkeeping an idle session
     /// keeps appending (artifact ledgers, away summaries, titles…).
+    /// Local: the chat's own name, as Claude Code (and Herdr) shows it — the newest
+    /// `/rename` title in the tail, else Claude's auto-generated one. nil when the tail
+    /// carries neither.
+    static func chatTitle(in url: URL, maxBytes: Int = 96 * 1024) -> String? {
+        var auto: String?
+        for raw in tailLines(of: url, maxBytes: maxBytes).reversed() where raw.contains("-title\"") {
+            guard let d = raw.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { continue }
+            if let t = (obj["customTitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !t.isEmpty { return t }
+            if auto == nil,
+               let t = (obj["aiTitle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !t.isEmpty { auto = t }
+        }
+        return auto
+    }
+
     static func lastRealActivity(in url: URL, maxBytes: Int = 96 * 1024) -> Date? {
         for raw in tailLines(of: url, maxBytes: maxBytes).reversed() {
             guard let d = raw.data(using: .utf8),

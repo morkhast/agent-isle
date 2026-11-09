@@ -90,3 +90,32 @@ final class RealActivityTests: XCTestCase {
         return url
     }
 }
+
+/// Local: the session name is the chat's own title, `/rename` beating the auto title.
+final class ChatTitleTests: XCTestCase {
+    private func transcript(_ lines: [String]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chat-title-\(UUID().uuidString).jsonl")
+        try lines.joined(separator: "\n").appending("\n").write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
+    func testRenameBeatsAutoTitle() throws {
+        let url = try transcript([
+            #"{"type":"custom-title","customTitle":"Agent Isle dots 2","sessionId":"s"}"#,
+            #"{"type":"user","timestamp":"2026-11-09T06:00:00.000Z","message":{"role":"user","content":"hi"}}"#,
+            #"{"type":"ai-title","aiTitle":"Fix notch dots","sessionId":"s"}"#,
+        ])
+        XCTAssertEqual(TranscriptReader.chatTitle(in: url), "Agent Isle dots 2")
+    }
+
+    func testAutoTitleWhenNotRenamed() throws {
+        let url = try transcript([#"{"type":"ai-title","aiTitle":"Fix notch dots","sessionId":"s"}"#])
+        XCTAssertEqual(TranscriptReader.chatTitle(in: url), "Fix notch dots")
+    }
+
+    func testNoTitle() throws {
+        let url = try transcript([#"{"type":"user","timestamp":"2026-11-09T06:00:00.000Z"}"#])
+        XCTAssertNil(TranscriptReader.chatTitle(in: url))
+    }
+}
