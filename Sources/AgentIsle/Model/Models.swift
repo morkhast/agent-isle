@@ -454,9 +454,10 @@ struct AgentSession: Identifiable, Equatable {
         tokens > 0 ? formatTokens(tokens) : nil
     }
 
-    /// Human-friendly elapsed time since the session started.
+    /// Human-friendly time since the session last did something. Local: was time since it
+    /// started; with several chats running side by side, recency is what the list is about.
     var elapsedText: String {
-        let s = Int(Date().timeIntervalSince(startedAt))
+        let s = max(0, Int(Date().timeIntervalSince(updatedAt)))
         if s < 60 { return "\(s)s" }
         if s < 3600 { return "\(s / 60)m" }
         return "\(s / 3600)h"

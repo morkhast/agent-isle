@@ -32,3 +32,14 @@ final class SessionOrderTests: XCTestCase {
         XCTAssertEqual(store.orderedSessions.first?.title, "a")
     }
 }
+
+/// Local: the row's time label is time since last activity, not session age.
+final class ElapsedTextTests: XCTestCase {
+    func testLabelCountsFromLastActivity() {
+        let now = Date()
+        let s = AgentSession(agent: .claude, title: "t", terminal: "T", lastMessage: "",
+                             status: .idle, startedAt: now.addingTimeInterval(-35 * 3600),
+                             updatedAt: now.addingTimeInterval(-5 * 60))
+        XCTAssertEqual(s.elapsedText, "5m")
+    }
+}
