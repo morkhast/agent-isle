@@ -26,7 +26,6 @@ final class NotchWindow: NSPanel {
     // Click-through is handled entirely by the PassthroughView's hit region instead.
     private let fixedWidth: CGFloat = 640
     private let fixedHeight: CGFloat = 500
-    private let hitPadding: CGFloat = 10   // enlarge the hit region slightly to steady hover
 
     init(store: SessionStore, settings: AppSettings) {
         self.geometry = NotchGeometry.current()
@@ -176,14 +175,11 @@ final class NotchWindow: NSPanel {
     /// The island renders at the top-center of the fixed window; mark exactly that
     /// rect (plus a little padding) as clickable so everything else stays click-through.
     private func updateHitRegion(_ islandSize: CGSize, offsetX: CGFloat) {
-        // Local: collapsed, the island is an invisible notch-sized target — open only from the
-        // physical notch itself, no padding spilling onto the menu bar or the window below.
-        // The padding stays for the expanded panel, so it doesn't drop on a jittery edge.
-        let collapsed = islandSize.width <= geometry.notchWidth + 0.5
-            && islandSize.height <= geometry.notchHeight + 0.5
-        let pad: CGFloat = collapsed ? 0 : hitPadding
-        let w = islandSize.width + pad * 2
-        let h = islandSize.height + pad * 2
+        // Local: no padding. Collapsed, the island is an invisible notch-sized target, so it
+        // opens only from the physical notch; expanded, it collapses right at the panel's edge
+        // (the exit debounce in `SessionStore.setHovering` absorbs a jittery pointer).
+        let w = islandSize.width
+        let h = islandSize.height
         // The island is centered in the window, then shifted by `islandOffsetX`.
         let x = (fixedWidth - w) / 2 + offsetX
         let y = fixedHeight - h   // top-aligned
